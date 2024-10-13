@@ -1,0 +1,27 @@
+[submodule "asks-ms"]
+	path = asks-ms
+	url = https://github.com/spring-final-project/asks-ms.git
+[submodule "auth-ms"]
+	path = auth-ms
+	url = https://github.com/spring-final-project/auth-ms.git
+[submodule "bookings-ms"]
+	path = bookings-ms
+	url = https://github.com/spring-final-project/bookings-ms.git
+[submodule "emails-ms"]
+	path = emails-ms
+	url = https://github.com/spring-final-project/emails-ms.git
+[submodule "eureka-ms"]
+	path = eureka-ms
+	url = https://github.com/spring-final-project/eureka-ms.git
+[submodule "gateway"]
+	path = gateway
+	url = https://github.com/spring-final-project/gateway.git
+[submodule "receipts-ms"]
+	path = receipts-ms
+	url = https://github.com/spring-final-project/receipts-ms.git
+[submodule "rooms-ms"]
+	path = rooms-ms
+	url = https://github.com/spring-final-project/rooms-ms.git
+[submodule "users-ms"]
+	path = users-ms
+	url = https://github.com/spring-final-project/users-ms.git
