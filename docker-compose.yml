@@ -181,16 +181,17 @@ services:
       - eureka
 
   bookings-db:
-    image: mysql:9.0.1
-    container_name: bookings-db
+    image: postgres:16.4
+    container_name: bookings_db
     restart: always
     ports:
-      - ${BOOKINGS_DB_PORT}:3306
+      - ${BOOKINGS_DB_PORT}:5432
     environment:
-      MYSQL_DATABASE: ${BOOKINGS_DB_NAME}
-      MYSQL_ROOT_PASSWORD: ${BOOKINGS_DB_PASSWORD}
+      POSTGRES_DB: ${BOOKINGS_DB_NAME}
+      POSTGRES_USER: ${BOOKINGS_DB_USERNAME}
+      POSTGRES_PASSWORD: ${BOOKINGS_DB_PASSWORD}
     volumes:
-      - bookings:/var/lib/mysql
+      - bookings:/var/lib/postgresql/data
 
   receipts:
     build:
@@ -231,7 +232,6 @@ services:
       KAFKA_HOST: kafka
       KAFKA_PORT: 9094
     depends_on:
-      - bookings
       - kafka
       - eureka
 
