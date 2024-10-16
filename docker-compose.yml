@@ -7,7 +7,7 @@ services:
     container_name: gateway
     restart: always
     ports:
-      - '${GATEWAY_PORT}:8080'
+      - "${GATEWAY_PORT}:8080"
     environment:
       JWT_SECRET: ${JWT_SECRET}
       EUREKA_HOST: eureka
@@ -30,7 +30,7 @@ services:
     container_name: auth
     restart: always
     ports:
-      - '${AUTH_PORT}:8080'
+      - "${AUTH_PORT}:8080"
     environment:
       EUREKA_HOST: eureka
       EUREKA_PORT: 8761
@@ -48,7 +48,7 @@ services:
     container_name: users
     restart: always
     ports:
-      - '${USERS_PORT}:8080'
+      - "${USERS_PORT}:8080"
     environment:
       DB_HOST: users-db
       DB_PORT: 5432
@@ -84,7 +84,7 @@ services:
     container_name: rooms
     restart: always
     ports:
-      - '${ROOMS_PORT}:8080'
+      - "${ROOMS_PORT}:8080"
     environment:
       DB_HOST: rooms-db
       DB_PORT: 5432
@@ -124,7 +124,7 @@ services:
     container_name: asks
     restart: always
     ports:
-      - '${ASKS_PORT}:8080'
+      - "${ASKS_PORT}:8080"
     environment:
       DB_HOST: asks-db
       DB_PORT: 3306
@@ -162,7 +162,7 @@ services:
     container_name: bookings
     restart: always
     ports:
-      - '${BOOKINGS_PORT}:8080'
+      - "${BOOKINGS_PORT}:8080"
     environment:
       DB_HOST: bookings-db
       DB_PORT: 5432
@@ -201,7 +201,7 @@ services:
     container_name: receipts
     restart: always
     ports:
-      - '${RECEIPTS_PORT}:8080'
+      - "${RECEIPTS_PORT}:8080"
     environment:
       USERS_MS_URL: users:8080
       ROOMS_MS_URL: rooms:8080
@@ -223,7 +223,7 @@ services:
     container_name: emails
     restart: always
     ports:
-      - '${EMAILS_PORT}:8080'
+      - "${EMAILS_PORT}:8080"
     environment:
       EMAIL_ACCOUNT: ${EMAIL_ACCOUNT}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
@@ -243,27 +243,27 @@ services:
     container_name: eureka
     restart: always
     ports:
-      - '${EUREKA_PORT}:8761'
+      - "${EUREKA_PORT}:8761"
 
   kafka:
-    image: 'apache/kafka:3.8.0'
+    image: "apache/kafka:3.8.0"
     container_name: kafka
     restart: always
     ports:
-      - '${KAFKA_PORT}:9092'
+      - "${KAFKA_PORT}:9092"
     environment:
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_NODE_ID: 1
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:9093'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT'
-      KAFKA_ADVERTISED_LISTENERS: 'EXTERNAL://localhost:${KAFKA_PORT},INTERNAL://kafka:9094'
-      KAFKA_LISTENERS: 'EXTERNAL://0.0.0.0:${KAFKA_PORT},INTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "EXTERNAL://localhost:${KAFKA_PORT},INTERNAL://kafka:9094"
+      KAFKA_LISTENERS: "EXTERNAL://0.0.0.0:${KAFKA_PORT},INTERNAL://0.0.0.0:9094,CONTROLLER://0.0.0.0:9093"
       KAFKA_LOG_DIRS: /var/lib/kafka/data
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
     volumes:
       - kafka_logs:/var/lib/kafka/data
