@@ -93,8 +93,7 @@ services:
       DB_PASSWORD: ${ROOMS_DB_PASSWORD}
       EUREKA_HOST: eureka
       EUREKA_PORT: 8761
-      KAFKA_HOST: kafka
-      KAFKA_PORT: 9094
+      KAFKA_URL: kafka:9094
       S3_BUCKET_NAME: ${ROOMS_S3_BUCKET_NAME}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -133,8 +132,7 @@ services:
       DB_PASSWORD: ${ASKS_DB_PASSWORD}
       EUREKA_HOST: eureka
       EUREKA_PORT: 8761
-      KAFKA_HOST: kafka
-      KAFKA_PORT: 9094
+      KAFKA_URL: kafka:9094
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     depends_on:
@@ -171,8 +169,7 @@ services:
       DB_PASSWORD: ${BOOKINGS_DB_PASSWORD}
       EUREKA_HOST: eureka
       EUREKA_PORT: 8761
-      KAFKA_HOST: kafka
-      KAFKA_PORT: 9094
+      KAFKA_URL: kafka:9094
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     depends_on:
@@ -205,8 +202,7 @@ services:
     environment:
       USERS_MS_URL: users:8080
       ROOMS_MS_URL: rooms:8080
-      KAFKA_HOST: kafka
-      KAFKA_PORT: 9094
+      KAFKA_URL: kafka:9094
       S3_BUCKET_NAME: ${RECEIPTS_S3_BUCKET_NAME}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -229,8 +225,7 @@ services:
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
       USERS_MS_URL: users:8080
       ROOMS_MS_URL: rooms:8080
-      KAFKA_HOST: kafka
-      KAFKA_PORT: 9094
+      KAFKA_URL: kafka:9094
     depends_on:
       - kafka
       - eureka
