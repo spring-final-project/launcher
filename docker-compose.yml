@@ -1,3 +1,9 @@
+#
+# Se comentaron las líneas de los puertos de los servicios internos para que puedan ser accedidos
+# únicamente a través del gateway
+# En caso de querer acceder a los servicios directamente, deberán descomentarse las líneas correspondientes
+#
+
 services:
   gateway:
     build:
@@ -29,8 +35,8 @@ services:
     image: auth-ms
     container_name: auth
     restart: always
-    ports:
-      - "${AUTH_PORT}:8080"
+#    ports:
+#      - "${AUTH_PORT}:8080"
     environment:
       EUREKA_HOST: eureka
       EUREKA_PORT: 8761
@@ -47,8 +53,8 @@ services:
     image: users-ms
     container_name: users
     restart: always
-    ports:
-      - "${USERS_PORT}:8080"
+#    ports:
+#      - "${USERS_PORT}:8080"
     environment:
       DB_HOST: users-db
       DB_PORT: 5432
@@ -67,8 +73,8 @@ services:
     image: postgres:16.4
     container_name: users_db
     restart: always
-    ports:
-      - ${USERS_DB_PORT}:5432
+#    ports:
+#      - ${USERS_DB_PORT}:5432
     environment:
       POSTGRES_DB: ${USERS_DB_NAME}
       POSTGRES_USER: ${USERS_DB_USERNAME}
@@ -83,8 +89,8 @@ services:
     image: rooms-ms
     container_name: rooms
     restart: always
-    ports:
-      - "${ROOMS_PORT}:8080"
+#    ports:
+#      - "${ROOMS_PORT}:8080"
     environment:
       DB_HOST: rooms-db
       DB_PORT: 5432
@@ -94,7 +100,7 @@ services:
       EUREKA_HOST: eureka
       EUREKA_PORT: 8761
       KAFKA_URL: kafka:9094
-      S3_BUCKET_NAME: ${ROOMS_S3_BUCKET_NAME}
+#      S3_BUCKET_NAME: ${ROOMS_S3_BUCKET_NAME}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     depends_on:
@@ -106,8 +112,8 @@ services:
     image: postgres:16.4
     container_name: rooms_db
     restart: always
-    ports:
-      - ${ROOMS_DB_PORT}:5432
+#    ports:
+#      - ${ROOMS_DB_PORT}:5432
     environment:
       POSTGRES_DB: ${ROOMS_DB_NAME}
       POSTGRES_USER: ${ROOMS_DB_USERNAME}
@@ -122,8 +128,8 @@ services:
     image: asks-ms
     container_name: asks
     restart: always
-    ports:
-      - "${ASKS_PORT}:8080"
+#    ports:
+#      - "${ASKS_PORT}:8080"
     environment:
       DB_HOST: asks-db
       DB_PORT: 3306
@@ -144,8 +150,8 @@ services:
     image: mysql:9.0.1
     container_name: asks_db
     restart: always
-    ports:
-      - ${ASKS_DB_PORT}:3306
+#    ports:
+#      - ${ASKS_DB_PORT}:3306
     environment:
       MYSQL_DATABASE: ${ASKS_DB_NAME}
       MYSQL_ROOT_PASSWORD: ${ASKS_DB_PASSWORD}
@@ -159,8 +165,8 @@ services:
     image: bookings-ms
     container_name: bookings
     restart: always
-    ports:
-      - "${BOOKINGS_PORT}:8080"
+#    ports:
+#      - "${BOOKINGS_PORT}:8080"
     environment:
       DB_HOST: bookings-db
       DB_PORT: 5432
@@ -181,8 +187,8 @@ services:
     image: postgres:16.4
     container_name: bookings_db
     restart: always
-    ports:
-      - ${BOOKINGS_DB_PORT}:5432
+#    ports:
+#      - ${BOOKINGS_DB_PORT}:5432
     environment:
       POSTGRES_DB: ${BOOKINGS_DB_NAME}
       POSTGRES_USER: ${BOOKINGS_DB_USERNAME}
@@ -197,13 +203,12 @@ services:
     image: receipts-ms
     container_name: receipts
     restart: always
-    ports:
-      - "${RECEIPTS_PORT}:8080"
+#    ports:
+#      - "${RECEIPTS_PORT}:8080"
     environment:
-      USERS_MS_URL: users:8080
-      ROOMS_MS_URL: rooms:8080
+      EUREKA_HOST: eureka
+      EUREKA_PORT: 8761
       KAFKA_URL: kafka:9094
-      S3_BUCKET_NAME: ${RECEIPTS_S3_BUCKET_NAME}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
     depends_on:
@@ -218,13 +223,11 @@ services:
     image: emails-ms
     container_name: emails
     restart: always
-    ports:
-      - "${EMAILS_PORT}:8080"
+#    ports:
+#      - "${EMAILS_PORT}:8080"
     environment:
       EMAIL_ACCOUNT: ${EMAIL_ACCOUNT}
       EMAIL_PASSWORD: ${EMAIL_PASSWORD}
-      USERS_MS_URL: users:8080
-      ROOMS_MS_URL: rooms:8080
       KAFKA_URL: kafka:9094
     depends_on:
       - kafka
@@ -244,8 +247,8 @@ services:
     image: "apache/kafka:3.8.0"
     container_name: kafka
     restart: always
-    ports:
-      - "${KAFKA_PORT}:9092"
+#    ports:
+#      - "${KAFKA_PORT}:9092"
     environment:
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_NODE_ID: 1
@@ -258,7 +261,6 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
     volumes:
       - kafka_logs:/var/lib/kafka/data

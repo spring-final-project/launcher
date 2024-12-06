@@ -1,10 +1,5 @@
 #!/bin/bash
 sudo dnf update -y
-echo "export DB_NAME=${USERS_DB_NAME}" | sudo tee -a /etc/environment
-echo "export DB_HOST=${USERS_DB_HOST}" | sudo tee -a /etc/environment
-echo "export DB_PORT=${USERS_DB_PORT}" | sudo tee -a /etc/environment
-echo "export DB_USERNAME=${USERS_DB_USERNAME}" | sudo tee -a /etc/environment
-echo "export DB_PASSWORD=${USERS_DB_PASSWORD}" | sudo tee -a /etc/environment
 echo "export EUREKA_HOST=${EUREKA_HOST}" | sudo tee -a /etc/environment
 echo "export EUREKA_PORT=${EUREKA_PORT}" | sudo tee -a /etc/environment
 echo "export KAFKA_URL=${KAFKA_URL}" | sudo tee -a /etc/environment
@@ -32,10 +27,10 @@ sudo dnf install java-21-amazon-corretto -y
 
 # Clone repo
 cd /home/ec2-user
-git clone https://github.com/spring-final-project/rooms-ms.git
-cd rooms-ms
+git clone https://github.com/spring-final-project/receipts-ms.git
+cd receipts-ms
 
 # Build and run
 sudo chmod +x mvnw
 sudo ./mvnw clean package -DskipTests
-java -jar target/rooms-ms-0.0.1.jar
+java -jar target/receipts-ms-0.0.1.jar

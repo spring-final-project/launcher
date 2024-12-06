@@ -81,7 +81,6 @@ resource "aws_eip" "nat_eip" {
   domain = "vpc"
   depends_on = [aws_internet_gateway.gw]
 }
-
 resource "aws_nat_gateway" "nat_gw" {
   allocation_id = aws_eip.nat_eip.id
   subnet_id     = aws_subnet.public_subnet.id
@@ -93,6 +92,11 @@ resource "aws_route_table" "private_route_table" {
 
 resource "aws_route_table_association" "private_route_assoc" {
   subnet_id      = aws_subnet.private_subnet.id
+  route_table_id = aws_route_table.private_route_table.id
+}
+
+resource "aws_route_table_association" "private_route_assoc2" {
+  subnet_id      = aws_subnet.private_subnet_2.id
   route_table_id = aws_route_table.private_route_table.id
 }
 
@@ -202,12 +206,40 @@ resource "aws_security_group" "kafka_sg" {
   description = "Allow access to Kafka"
   vpc_id      = aws_vpc.main_vpc.id
 
+#   ingress {
+#     from_port       = 9092
+#     to_port         = 9092
+#     protocol        = "tcp"
+#     cidr_blocks     = ["10.0.3.0/24","10.0.4.0/24"]
+#   }
+
   ingress {
     from_port       = 9092
     to_port         = 9092
     protocol        = "tcp"
-    cidr_blocks     = ["10.0.3.0/24"]
+    cidr_blocks     = [aws_vpc.main_vpc.cidr_block]
   }
+
+#   ingress {
+#     from_port       = 9094
+#     to_port         = 9094
+#     protocol        = "tcp"
+#     cidr_blocks     = ["10.0.3.0/24","10.0.4.0/24"]
+#   }
+
+#   ingress {
+#     from_port       = 9092
+#     to_port         = 9092
+#     protocol        = "tcp"
+#     cidr_blocks     = ["0.0.0.0/0"]
+#   }
+#
+#   ingress {
+#     from_port       = 9094
+#     to_port         = 9094
+#     protocol        = "tcp"
+#     cidr_blocks     = ["0.0.0.0/0"]
+#   }
 
   egress {
     from_port       = 0
@@ -222,7 +254,19 @@ resource "aws_msk_configuration" "kafka_configuration" {
 
   server_properties = <<PROPERTIES
   auto.create.topics.enable=true
-  PROPERTIES
+delete.topic.enable=true
+default.replication.factor=2
+min.insync.replicas=2
+num.io.threads=8
+num.network.threads=5
+num.partitions=1
+num.replica.fetchers=2
+replica.lag.time.max.ms=30000
+socket.receive.buffer.bytes=102400
+socket.request.max.bytes=104857600
+socket.send.buffer.bytes=102400
+unclean.leader.election.enable=false
+PROPERTIES
 }
 
 resource "aws_msk_cluster" "kafka_cluster" {
@@ -240,6 +284,17 @@ resource "aws_msk_cluster" "kafka_cluster" {
   configuration_info {
     arn = aws_msk_configuration.kafka_configuration.arn
     revision = aws_msk_configuration.kafka_configuration.latest_revision
+  }
+
+  encryption_info {
+    encryption_in_transit {
+      client_broker = "PLAINTEXT"
+      in_cluster    = true
+    }
+  }
+
+  client_authentication {
+    # Ninguna autenticación habilitada
   }
 
   tags = {
@@ -408,7 +463,7 @@ resource "aws_security_group" "eureka_sg" {
     from_port       = 8761
     to_port         = 8761
     protocol        = "tcp"
-    security_groups = [aws_security_group.alb_sg.id, aws_security_group.gateway_sg.id, aws_security_group.users_sg.id, aws_security_group.auth_sg.id, aws_security_group.rooms_sg.id, aws_security_group.asks_sg.id, aws_security_group.bookings_sg.id]
+    security_groups = [aws_security_group.alb_sg.id, aws_security_group.gateway_sg.id, aws_security_group.users_sg.id, aws_security_group.auth_sg.id, aws_security_group.rooms_sg.id, aws_security_group.asks_sg.id, aws_security_group.bookings_sg.id, aws_security_group.receipts_sg.id]
   }
 
   ingress {
@@ -433,6 +488,7 @@ resource "aws_instance" "eureka" {
   subnet_id       = aws_subnet.public_subnet.id
   security_groups = [aws_security_group.eureka_sg.id]
   associate_public_ip_address = true
+  depends_on = [aws_msk_cluster.kafka_cluster]
 
   tags = {
     Name = "eureka-instance"
@@ -455,7 +511,7 @@ resource "aws_security_group" "users_sg" {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_sg.id, aws_security_group.auth_sg.id]
+    security_groups = [aws_security_group.gateway_sg.id, aws_security_group.auth_sg.id, aws_security_group.asks_sg.id, aws_security_group.bookings_sg.id]
   }
 
   egress {
@@ -498,7 +554,7 @@ resource "aws_iam_role_policy_attachment" "users_ssm_attach" {
 
 # IAM instance profile
 resource "aws_iam_instance_profile" "ec2_user_profile" {
-  name = "EC2UserProfile"
+  name = "EC2UsersProfile"
   role = aws_iam_role.ec2_user_role.name
 }
 
@@ -509,6 +565,12 @@ resource "aws_autoscaling_group" "users_asg" {
   max_size             = 3
   desired_capacity     = 1
   name = "users-asg"
+
+  tag {
+    key                 = "Name"
+    value               = "users-instance"
+    propagate_at_launch = true
+  }
 
   launch_template {
     id      = aws_launch_template.users_template.id
@@ -606,18 +668,6 @@ resource "aws_db_instance" "users_db" {
   backup_retention_period = 0
   storage_type = "gp2"
   multi_az = false
-}
-
-# Get first instance info of users service
-data "aws_autoscaling_group" "users_asg_info" {
-  name = aws_autoscaling_group.users_asg.name
-}
-
-data "aws_instances" "user_instances_info" {
-  filter {
-    name = "tag:aws:autoscaling:users-asg"
-    values = [data.aws_autoscaling_group.users_asg_info.name]
-  }
 }
 
 ########################################################################################
@@ -753,7 +803,7 @@ resource "aws_security_group" "rooms_sg" {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_sg.id, aws_security_group.asks_sg.id, aws_security_group.bookings_sg.id] # aws_security_group.kafka_sg.id
+    security_groups = [aws_security_group.gateway_sg.id, aws_security_group.asks_sg.id, aws_security_group.bookings_sg.id, aws_security_group.kafka_sg.id]
   }
 
   egress {
@@ -789,9 +839,15 @@ resource "aws_iam_role_policy_attachment" "rooms_xray_attach" {
   policy_arn = aws_iam_policy.xray_policy.arn
 }
 
+# To be able to access via SSH to the instance
 resource "aws_iam_role_policy_attachment" "rooms_ssm_attach" {
   role       = aws_iam_role.ec2_rooms_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "rooms_kafka_api_access" {
+  role       = aws_iam_role.ec2_rooms_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSMSKReplicatorExecutionRole"
 }
 
 # Policy for S3 bucket
@@ -848,7 +904,7 @@ resource "aws_launch_template" "rooms_template" {
   instance_type                         = var.instance_type
   instance_initiated_shutdown_behavior  = "terminate"
 
-  depends_on = [aws_db_instance.rooms_db, aws_instance.eureka] # aws_msk_cluster.kafka_cluster
+  depends_on = [aws_db_instance.rooms_db, aws_instance.eureka]
 
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_rooms_profile.name
@@ -887,8 +943,9 @@ resource "aws_launch_template" "rooms_template" {
     USERS_DB_PASSWORD = aws_db_instance.rooms_db.password
     EUREKA_HOST       = aws_instance.eureka.private_ip
     EUREKA_PORT       = 8761
-    KAFKA_URL         = "localhost:9092" # aws_msk_cluster.kafka_cluster.bootstrap_brokers_tls
+    KAFKA_URL         = aws_msk_cluster.kafka_cluster.bootstrap_brokers
     S3_BUCKET_NAME    = aws_s3_bucket.rooms_bucket.bucket
+    S3_BUCKET_REGION  = var.region
   }))
 }
 
@@ -971,18 +1028,6 @@ resource "aws_s3_bucket_policy" "rooms_bucket_policy" {
   })
 }
 
-# Get first instance info of rooms service
-data "aws_autoscaling_group" "rooms_asg_info" {
-  name = aws_autoscaling_group.rooms_asg.name
-}
-
-data "aws_instances" "rooms_instances_info" {
-  filter {
-    name = "tag:aws:autoscaling:rooms-asg"
-    values = [data.aws_autoscaling_group.rooms_asg_info.name]
-  }
-}
-
 ########################################################################################
 
 # ASKS
@@ -997,7 +1042,7 @@ resource "aws_security_group" "asks_sg" {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_sg.id] # aws_security_group.kafka_sg.id
+    security_groups = [aws_security_group.gateway_sg.id]
   }
 
   egress {
@@ -1038,6 +1083,11 @@ resource "aws_iam_role_policy_attachment" "asks_ssm_attach" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy_attachment" "asks_kafka_api_access" {
+  role       = aws_iam_role.ec2_rooms_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSMSKReplicatorExecutionRole"
+}
+
 # IAM instance profile
 resource "aws_iam_instance_profile" "ec2_asks_profile" {
   name = "EC2AsksProfile"
@@ -1064,7 +1114,7 @@ resource "aws_launch_template" "asks_template" {
   instance_type                         = var.instance_type
   instance_initiated_shutdown_behavior  = "terminate"
 
-  depends_on = [aws_db_instance.asks_db, aws_instance.eureka] # aws_msk_cluster.kafka_cluster
+  depends_on = [aws_db_instance.asks_db, aws_instance.eureka]
 
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_asks_profile.name
@@ -1103,7 +1153,7 @@ resource "aws_launch_template" "asks_template" {
     USERS_DB_PASSWORD = aws_db_instance.asks_db.password
     EUREKA_HOST       = aws_instance.eureka.private_ip
     EUREKA_PORT       = 8761
-    KAFKA_URL         = "localhost:9092" # aws_msk_cluster.kafka_cluster.bootstrap_brokers_tls
+    KAFKA_URL         = aws_msk_cluster.kafka_cluster.bootstrap_brokers
   }))
 }
 
@@ -1164,7 +1214,7 @@ resource "aws_security_group" "bookings_sg" {
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.gateway_sg.id] # aws_security_group.kafka_sg.id
+    security_groups = [aws_security_group.gateway_sg.id, aws_security_group.kafka_sg.id]
   }
 
   egress {
@@ -1205,6 +1255,11 @@ resource "aws_iam_role_policy_attachment" "bookings_ssm_attach" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
+resource "aws_iam_role_policy_attachment" "bookings_kafka_api_access" {
+  role       = aws_iam_role.ec2_rooms_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSMSKReplicatorExecutionRole"
+}
+
 # IAM instance profile
 resource "aws_iam_instance_profile" "ec2_bookings_profile" {
   name = "EC2BookingsProfile"
@@ -1231,7 +1286,7 @@ resource "aws_launch_template" "bookings_template" {
   instance_type                         = var.instance_type
   instance_initiated_shutdown_behavior  = "terminate"
 
-  depends_on = [aws_db_instance.bookings_db, aws_instance.eureka] # aws_msk_cluster.kafka_cluster
+  depends_on = [aws_db_instance.bookings_db, aws_instance.eureka]
 
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_bookings_profile.name
@@ -1270,7 +1325,7 @@ resource "aws_launch_template" "bookings_template" {
     USERS_DB_PASSWORD = aws_db_instance.bookings_db.password
     EUREKA_HOST       = aws_instance.eureka.private_ip
     EUREKA_PORT       = 8761
-    KAFKA_URL         = "localhost:9092" # aws_msk_cluster.kafka_cluster.bootstrap_brokers_tls
+    KAFKA_URL         = aws_msk_cluster.kafka_cluster.bootstrap_brokers
   }))
 }
 
@@ -1319,7 +1374,7 @@ resource "aws_db_instance" "bookings_db" {
 
 ########################################################################################
 
-# Receipts
+# RECEIPTS
 
 ########################################################################################
 
@@ -1327,6 +1382,13 @@ resource "aws_db_instance" "bookings_db" {
 resource "aws_security_group" "receipts_sg" {
   name        = "receipts-sg"
   vpc_id      = aws_vpc.main_vpc.id
+
+  ingress {
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    security_groups = [aws_security_group.kafka_sg.id]
+  }
 
   # Necesario para invocar MSK
   egress {
@@ -1338,38 +1400,44 @@ resource "aws_security_group" "receipts_sg" {
 }
 
 # Rol de ejecución de Lambda
-resource "aws_iam_role" "receipts_lambda_role" {
-  name = "receipts-lambda-role"
+resource "aws_iam_role" "ec2_receipts_role" {
+  name = "EC2ReceiptsRole"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
+    "Version": "2012-10-17",
+    "Statement": [
       {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "lambda.amazonaws.com"
-        }
+        "Action": "sts:AssumeRole",
+        "Effect": "Allow",
+        "Sid": ""
+        "Principal": {
+          "Service": "ec2.amazonaws.com"
+        },
       }
     ]
   })
 }
 
-# Necessary for to be inside VPC
-resource "aws_iam_role_policy_attachment" "receipts_vpc_attach" {
-  role       = aws_iam_role.receipts_lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+# Attach policy to EC2 role
+resource "aws_iam_role_policy_attachment" "receipts_xray_attach" {
+  role       = aws_iam_role.ec2_receipts_role.name
+  policy_arn = aws_iam_policy.xray_policy.arn
 }
 
-# Necessary for MSK
-resource "aws_iam_role_policy_attachment" "receipts_kafka_attach" {
-  role       = aws_iam_role.receipts_lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonMSKReadOnlyAccess"
+# To be able to access via SSH to the instance
+resource "aws_iam_role_policy_attachment" "receipts_ssm_attach" {
+  role       = aws_iam_role.ec2_receipts_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy_attachment" "receipts_kafka_api_access" {
+  role       = aws_iam_role.ec2_receipts_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSMSKReplicatorExecutionRole"
 }
 
 # Policy for S3 bucket
-resource "aws_iam_policy" "receipts_s3_bucket_policy" {
+resource "aws_iam_role_policy" "receipts_s3_bucket_policy" {
   name = "RecetipsS3BucketPolicy"
-  description = "IAM policy for S3 bucket"
+  role = aws_iam_role.ec2_receipts_role.name
   depends_on = [aws_s3_bucket.receipts_bucket]
 
   policy = jsonencode({
@@ -1388,72 +1456,71 @@ resource "aws_iam_policy" "receipts_s3_bucket_policy" {
   })
 }
 
-resource "aws_iam_role_policy_attachment" "receipts_s3_bucket_policy_attach" {
-  role       = aws_iam_role.receipts_lambda_role.name
-  policy_arn = aws_iam_policy.receipts_s3_bucket_policy.arn
+# IAM instance profile
+resource "aws_iam_instance_profile" "ec2_receipts_profile" {
+  name = "EC2ReceiptsProfile"
+  role = aws_iam_role.ec2_receipts_role.name
 }
 
-# Compile receipts-ms
-resource "null_resource" "receipts_build_application" {
-  provisioner "local-exec" {
-    command = "./mvnw clean package -DskipTests || mvnw clean package -DskipTests"
+# Create a Auto Scaling Group for Receipts service
+resource "aws_autoscaling_group" "receipts_asg" {
+  availability_zones = [var.availability_zones[0]]
+  min_size             = 1
+  max_size             = 3
+  desired_capacity     = 1
+  name = "receipts-asg"
+
+  launch_template {
+    id      = aws_launch_template.receipts_template.id
+    version = "$Latest"
   }
 }
 
-# Create S3 bucket for code deploy
-resource "aws_s3_bucket" "receipts_deploy_bucket" {
-  bucket = "spring-final-project-receipts-deploy"
-  force_destroy = true
-}
+# Create launch template for Receipts service
+resource "aws_launch_template" "receipts_template" {
+  name_prefix                           = "receipts-lt-"
+  image_id                              = var.ami
+  instance_type                         = var.instance_type
+  instance_initiated_shutdown_behavior  = "terminate"
 
-resource "aws_s3_object" "receipts_code" {
-  bucket = aws_s3_bucket.receipts_deploy_bucket.id
-  key    = "receipts-ms-0.0.1-aws.jar"
-  source = "${path.module}/target/receipts-ms-0.0.1-aws.jar"
-  depends_on = [null_resource.receipts_build_application]
-}
+  depends_on = [aws_instance.eureka]
 
-# Allow MSK to invoke Lambda
-resource "aws_lambda_permission" "allow_msk_receipts" {
-  statement_id  = "AllowMSKInvokeReceipts"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.receipts_lambda.function_name
-  principal     = "kafka.amazonaws.com"
-  source_arn    = aws_msk_cluster.kafka_cluster.arn
-}
-
-# Create trigger MSK-Lambda
-resource "aws_lambda_event_source_mapping" "receipts_msk_trigger" {
-  event_source_arn  = aws_msk_cluster.kafka_cluster.arn
-  function_name     = aws_lambda_function.receipts_lambda.function_name
-  starting_position = "TRIM_HORIZON"
-  topics            = ["BOOKING_CREATED_TOPIC"]
-}
-
-resource "aws_lambda_function" "receipts_lambda" {
-  function_name = "receipts-lambda"
-  role          = aws_iam_role.receipts_lambda_role.arn
-  handler       = "org.springframework.cloud.function.adapter.aws.FunctionInvoker::handleRequest"
-  runtime       = "java21"
-  s3_bucket     = aws_s3_bucket.receipts_deploy_bucket.id
-  s3_key        = aws_s3_object.receipts_code.key
-  memory_size   = 512
-  timeout       = 30
-  depends_on    = [aws_s3_object.receipts_code]
-
-  vpc_config {
-    subnet_ids         = [aws_subnet.private_subnet.id]
-    security_group_ids = [aws_security_group.receipts_sg.id]
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_receipts_profile.name
   }
-  environment {
-    variables = {
-      MAIN_CLASS      = "com.springcloud.demo.bookingreceipt.BookingReceiptApplication"
-      USERS_MS_URL    = data.aws_instances.user_instances_info[0].private_ips[0]
-      ROOMS_MS_URL    = data.aws_instances.rooms_instances_info[0].private_ips[0]
-      KAFKA_URL       = "localhost:9092" # aws_msk_cluster.kafka_cluster.bootstrap_brokers_tls
-      S3_BUCKET_NAME  = "spring-final-project-receipts"
+
+  network_interfaces {
+    security_groups = [aws_security_group.receipts_sg.id]
+    subnet_id = aws_subnet.private_subnet.id
+  }
+
+  block_device_mappings {
+    device_name = "/dev/sdf"
+
+    ebs {
+      volume_size = 8
+      delete_on_termination = true
     }
   }
+
+  monitoring {
+    enabled = true
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "receipts-ms"
+    }
+  }
+
+  user_data = base64encode(templatefile("scripts/receipts.sh", {
+    EUREKA_HOST       = aws_instance.eureka.private_ip
+    EUREKA_PORT       = 8761
+    KAFKA_URL         = aws_msk_cluster.kafka_cluster.bootstrap_brokers
+    S3_BUCKET_NAME    = aws_s3_bucket.receipts_bucket.bucket
+    S3_BUCKET_REGION  = var.region
+  }))
 }
 
 # Create S3 bucket for Receipts service
@@ -1494,7 +1561,7 @@ resource "aws_s3_bucket_policy" "receipts_bucket_policy" {
 
 ########################################################################################
 
-# Emails
+# EMAILS
 
 ########################################################################################
 
@@ -1502,8 +1569,21 @@ resource "aws_s3_bucket_policy" "receipts_bucket_policy" {
 resource "aws_security_group" "emails_sg" {
   name        = "emails-sg"
   vpc_id      = aws_vpc.main_vpc.id
-}
 
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    security_groups = [aws_security_group.kafka_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
 # Rol de ejecución de Lambda
 resource "aws_iam_role" "emails_lambda_role" {
   name = "emails-lambda-role"
@@ -1528,15 +1608,25 @@ resource "aws_iam_role_policy_attachment" "emails_vpc_attach" {
 }
 
 # Necessary for MSK
+resource "aws_iam_role_policy_attachment" "emails_kafka_api_access" {
+  role       = aws_iam_role.emails_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaMSKExecutionRole"
+}
 resource "aws_iam_role_policy_attachment" "emails_kafka_attach" {
   role       = aws_iam_role.emails_lambda_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonMSKReadOnlyAccess"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSMSKReplicatorExecutionRole"
+}
+
+# # Monitoring with Cloudwatch
+resource "aws_iam_role_policy_attachment" "emails_cloudwatch_logs_policy_attachment" {
+  role = aws_iam_role.emails_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 # Compile emails-ms
 resource "null_resource" "build_application" {
   provisioner "local-exec" {
-    command = "./mvnw clean package -DskipTests || mvnw clean package -DskipTests"
+    command = "(cd emails-ms && mvnw clean package -DskipTests) || (cd emails-ms && mvnw clean package -DskipTests)"
   }
 }
 
@@ -1549,7 +1639,7 @@ resource "aws_s3_bucket" "emails_deploy_bucket" {
 resource "aws_s3_object" "emails_code" {
   bucket = aws_s3_bucket.emails_deploy_bucket.id
   key    = "emails-ms-0.0.1-aws.jar"
-  source = "${path.module}/target/emails-ms-0.0.1-aws.jar"
+  source = "${path.module}/emails-ms/target/emails-ms-0.0.1-aws.jar"
   depends_on = [null_resource.build_application]
 }
 
@@ -1563,11 +1653,25 @@ resource "aws_lambda_permission" "allow_msk_emails" {
 }
 
 # Create trigger MSK-Lambda
-resource "aws_lambda_event_source_mapping" "msk_trigger" {
+resource "aws_lambda_event_source_mapping" "emails_ask_created_msk_trigger" {
   event_source_arn  = aws_msk_cluster.kafka_cluster.arn
-  function_name     = aws_lambda_function.emails_lambda.function_name
+  function_name     = aws_lambda_function.emails_lambda.arn
   starting_position = "TRIM_HORIZON"
-  topics            = ["ASK_CREATED_TOPIC","BOOKING_CREATED_TOPIC","BOOKING_RECEIPT_GENERATED_TOPIC"]
+  topics            = ["ASK_CREATED_TOPIC"]
+}
+
+resource "aws_lambda_event_source_mapping" "emails_booking_created_msk_trigger" {
+  event_source_arn  = aws_msk_cluster.kafka_cluster.arn
+  function_name     = aws_lambda_function.emails_lambda.arn
+  starting_position = "TRIM_HORIZON"
+  topics            = ["BOOKING_CREATED_TOPIC"]
+}
+
+resource "aws_lambda_event_source_mapping" "emails_booking_receipt_generated_msk_trigger" {
+  event_source_arn  = aws_msk_cluster.kafka_cluster.arn
+  function_name     = aws_lambda_function.emails_lambda.arn
+  starting_position = "TRIM_HORIZON"
+  topics            = ["BOOKING_RECEIPT_GENERATED_TOPIC"]
 }
 
 resource "aws_lambda_function" "emails_lambda" {
@@ -1588,12 +1692,15 @@ resource "aws_lambda_function" "emails_lambda" {
 
   environment {
     variables = {
-      MAIN_CLASS      = "com.springcloud.demo.emailsmicroservice.EmailMicroserviceApplication"
-      USERS_MS_URL    = data.aws_instances.user_instances_info[0].private_ips[0]
-      ROOMS_MS_URL    = data.aws_instances.rooms_instances_info[0].private_ips[0]
-      KAFKA_URL       = "localhost:9092" # aws_msk_cluster.kafka_cluster.bootstrap_brokers_tls
+      MAIN_CLASS      = "com.springcloud.demo.emailmicroservice.EmailMicroserviceApplication"
+      KAFKA_URL       = aws_msk_cluster.kafka_cluster.bootstrap_brokers
       EMAIL_ACCOUNT   = var.email_account
       EMAIL_PASSWORD  = var.email_password
     }
   }
+}
+
+resource "aws_cloudwatch_log_group" "emails_log_group" {
+  name              = "/aws/lambda/${aws_lambda_function.emails_lambda.function_name}"
+  retention_in_days = 14
 }
